@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:aop="http://www.springframework.org/schema/aop" xmlns:tx="http://www.springframework.org/schema/tx"
+	xsi:schemaLocation="http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-4.0.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-4.0.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.0.xsd">
+
+	<!-- spring的自动扫描配置，会扫描使用@Service注解的类到IOC容器中 -->
+	<context:component-scan base-package="com.ssm.system"></context:component-scan>
+	<context:annotation-config></context:annotation-config>
+	<!-- 扫描配置文件 -->
+	<context:property-placeholder
+		file-encoding="utf-8" location="classpath:db.properties,
+		classpath:activeMQ.properties" />
+	
+	<import resource="classpath:spring-ActiveMQ.xml"/>
+	<!--引入redis属性配置  -->
+	<import resource="classpath:redis.xml"></import>
+
+	<!-- 连接池 -->
+	<bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource">
+		<!-- <property name="driverClassName" value="${jdbc.driver}" /> -->
+		<property name="url" value="${jdbc.url}" />
+		<property name="username" value="${jdbc.username}" />
+		<property name="password" value="${jdbc.password}" />
+	</bean>
+
+	<!-- 整合mybatis -->
+	<bean id="sqlSessionFactoryBean" class="org.mybatis.spring.SqlSessionFactoryBean">
+		<property name="dataSource" ref="dataSource" />
+		<property name="mapperLocations"
+			value="classpath:com/ssm/system/api/*/mapper/*.xml" />
+	</bean>
+	<bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+		<property name="basePackage" value="com.ssm.system.api.*" />
+	</bean>
+
+	<!-- 配置事务 -->
+	<!-- 事务管理器 -->
+	<bean id="transactionManager"
+		class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<property name="dataSource" ref="dataSource" />
+	</bean>
+
+	<!-- 配置事务的通知 -->
+	<tx:advice id="transactionAdvice" transaction-manager="transactionManager">
+		<tx:attributes>
+			<tx:method name="add*" propagation="REQUIRED" />
+			<tx:method name="append*" propagation="REQUIRED" />
+			<tx:method name="insert*" propagation="REQUIRED" />
+			<tx:method name="save*" propagation="REQUIRED" />
+			<tx:method name="update*" propagation="REQUIRED" />
+			<tx:method name="modify*" propagation="REQUIRED" />
+			<tx:method name="edit*" propagation="REQUIRED" />
+			<tx:method name="delete*" propagation="REQUIRED" />
+			<tx:method name="remove*" propagation="REQUIRED" />
+			<tx:method name="repair" propagation="REQUIRED" />
+			<tx:method name="delAndRepair" propagation="REQUIRED" />
+			<tx:method name="get*" propagation="SUPPORTS" />
+			<tx:method name="find*" propagation="SUPPORTS" />
+			<tx:method name="load*" propagation="SUPPORTS" />
+			<tx:method name="search*" propagation="SUPPORTS" />
+			<tx:method name="datagrid*" propagation="SUPPORTS" />
+			<tx:method name="*" propagation="SUPPORTS" />
+		</tx:attributes>
+	</tx:advice>
+
+	<!-- 配置切面 -->
+	<aop:config>
+		<aop:pointcut id="transactionPointcut"
+			expression="execution (* com.ssm.system.*.service..*Impl.*(..))" />
+		<aop:advisor advice-ref="transactionAdvice" pointcut-ref="transactionPointcut" />
+	</aop:config>
+	
+	<!--定义要调用的任务的实现类  -->
+	<bean id="triggerService" class="com.ssm.system.quart.TriggerService"></bean>
+	
+	<!-- start 整合quartz -->
+	<!-- 任务触发器详细信息bean  调用实现类里面的某个方法 -->
+	<bean id="jobDetail"
+		class="org.springframework.scheduling.quartz.MethodInvokingJobDetailFactoryBean">
+		
+		<property name="targetObject" ref="triggerService" />
+		<!-- 执行的方法名  -->
+		<property name="targetMethod" value="doIt" />
+	</bean>
+	
+	<!-- 定义trigger触发器  定义调用任务的时间 -->
+	<bean id="cronTrigger"
+		class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+		<property name="jobDetail" ref="jobDetail" />
+		<!-- 设置时间 -->
+		<property name="cronExpression" value="0 */1 * * * ? " />
+	</bean>
+	
+	<!-- 设置触发器调度工厂   管理触发器 -->
+	<bean class="org.springframework.scheduling.quartz.SchedulerFactoryBean">
+		<property name="triggers">
+			<list>
+				<ref bean="cronTrigger" />
+			</list>
+		</property>
+	</bean>   
+	<!-- 整合quartz end -->
+</beans>
